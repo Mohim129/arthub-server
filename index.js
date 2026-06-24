@@ -37,6 +37,21 @@ async function run() {
         const database = client.db("arthub_db");
         const artworkCollection = database.collection("artworks");
 
+        app.get('/api/artworks', async (req, res) => {
+            const query = {};
+            if(req.query.artistId) {
+                query.artistId = req.query.artistId;
+            }
+            const artworks = await artworkCollection.find(query).toArray();
+            res.send(artworks);
+            if(req.query.status) {
+                query.status = req.query.status;
+            }
+            const cursor = artworkCollection.find(query);
+            const result = await cursor.toArray();
+            res.send(result);
+        });
+
         app.post('/api/artworks', async (req, res) => {
             const artwork = req.body;
             const result = await artworkCollection.insertOne(artwork);
@@ -48,7 +63,7 @@ async function run() {
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
-        await client.close();
+        // await client.close();
     }
 }
 run().catch(console.dir);
