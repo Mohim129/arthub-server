@@ -37,19 +37,39 @@ async function run() {
         const database = client.db("arthub_db");
         const artworkCollection = database.collection("artworks");
 
-        app.get('/api/artworks', async (req, res) => {
+        app.get("/api/artworks", async (req, res) => {
+          try {
             const query = {};
-            if(req.query.artistId) {
-                query.artistId = req.query.artistId;
+
+            if (req.query.artistId) {
+              query.artistId = req.query.artistId;
             }
+            if (req.query.status) {
+              query.status = req.query.status;
+            }
+            if (req.query.category) {
+              query.category = req.query.category; // e.g. "Digital Painting"
+            }
+
             const artworks = await artworkCollection.find(query).toArray();
-            res.send(artworks);
-            if(req.query.status) {
-                query.status = req.query.status;
-            }
-            const cursor = artworkCollection.find(query);
-            const result = await cursor.toArray();
-            res.send(result);
+
+            const result = artworks.map((art) => ({
+              id: art._id.toString(),
+              title: art.title,
+              category: art.category, // ← include category
+              description: art.description,
+              price: art.price,
+              image: art.image,
+              artistId: art.artistId,
+              status: art.status,
+              createdAt: art.createdAt ? art.createdAt.toISOString() : null,
+            }));
+
+            res.json(result);
+          } catch (error) {
+            console.error("Error fetching artworks:", error);
+            res.status(500).json({ error: "Failed to fetch artworks" });
+          }
         });
 
         app.post('/api/artworks', async (req, res) => {
