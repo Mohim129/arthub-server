@@ -39,33 +39,170 @@ async function run() {
 
       app.get("/api/artworks", async (req, res) => {
         try {
-          const query = {};
+          const {
+            artistId,
+            status,
+            category,
+            search,
+            minPrice,
+            maxPrice,
+            sortBy = "createdAt",
+            sortOrder = "desc",
+            page = 1,
+            limit = 8,
+          } = req.query;
 
-          if (req.query.artistId) {
-            query.artistId = req.query.artistId;
-          }
-          if (req.query.status) {
-            query.status = req.query.status;
-          }
-          if (req.query.category) {
-            query.category = req.query.category; // e.g. "Digital Painting"
+          // Build match stage
+          const match = {};
+          if (artistId) match.artistId = artistId;
+          if (status) match.status = status;
+          if (category && category !== "All Media") match.category = category;
+
+          // Price filter
+          if (minPrice || maxPrice) {
+            match.price = {};
+            if (minPrice) match.price.$gte = Number(minPrice);
+            if (maxPrice) match.price.$lte = Number(maxPrice);
           }
 
-          const artworks = await artworkCollection.find(query).toArray();
+          // Text search – we’ll search in both artwork title and joined artist name
+          if (search) {
+            const regex = new RegExp(search, "i");
+            match.$or = [
+              { title: { $regex: regex } },
+              // artist name will be added after lookup, so we can’t filter on it directly in the match.
+              // We’ll filter after lookup instead.
+            ];
+          }
+
+          // Sort stage
+          const sort = {};
+          if (sortBy === "price") {
+            sort.price = sortOrder === "asc" ? 1 : -1;
+          } else {
+            sort.createdAt = sortOrder === "asc" ? 1 : -1;
+          }
+
+          const pipeline = [
+            { $match: match },
+            {
+              $addFields: {
+                artistObjectId: {
+                  $convert: {
+                    input: "$artistId",
+                    to: "objectId",
+                    onError: null,
+                    onNull: null,
+                  },
+                },
+              },
+            },
+            {
+              $lookup: {
+                from: "user",
+                localField: "artistObjectId",
+                foreignField: "_id",
+                as: "artist",
+              },
+            },
+            { $unwind: { path: "$artist", preserveNullAndEmptyArrays: true } },
+            // If search is provided, filter by artist name now
+            ...(search
+              ? [
+                  {
+                    $match: {
+                      $or: [
+                        { title: { $regex: new RegExp(search, "i") } },
+                        { "artist.name": { $regex: new RegExp(search, "i") } },
+                      ],
+                    },
+                  },
+                ]
+              : []),
+            { $sort: sort },
+            { $skip: (Number(page) - 1) * Number(limit) },
+            { $limit: Number(limit) },
+            {
+              $project: {
+                _id: 1,
+                title: 1,
+                category: 1,
+                description: 1,
+                price: 1,
+                image: 1,
+                artistId: 1,
+                status: 1,
+                createdAt: 1,
+                artistName: "$artist.name",
+              },
+            },
+          ];
+
+          // For total count, run a separate aggregation without pagination
+          const countPipeline = [
+            { $match: match },
+            {
+              $addFields: {
+                artistObjectId: {
+                  $convert: {
+                    input: "$artistId",
+                    to: "objectId",
+                    onError: null,
+                    onNull: null,
+                  },
+                },
+              },
+            },
+            {
+              $lookup: {
+                from: "user",
+                localField: "artistObjectId",
+                foreignField: "_id",
+                as: "artist",
+              },
+            },
+            { $unwind: { path: "$artist", preserveNullAndEmptyArrays: true } },
+            ...(search
+              ? [
+                  {
+                    $match: {
+                      $or: [
+                        { title: { $regex: new RegExp(search, "i") } },
+                        { "artist.name": { $regex: new RegExp(search, "i") } },
+                      ],
+                    },
+                  },
+                ]
+              : []),
+            { $count: "total" },
+          ];
+
+          const [artworks, countResult] = await Promise.all([
+            artworkCollection.aggregate(pipeline).toArray(),
+            artworkCollection.aggregate(countPipeline).toArray(),
+          ]);
+
+          const total = countResult[0]?.total || 0;
 
           const result = artworks.map((art) => ({
             id: art._id.toString(),
             title: art.title,
-            category: art.category, // ← include category
+            category: art.category,
             description: art.description,
             price: art.price,
             image: art.image,
             artistId: art.artistId,
+            artistName: art.artistName || "Unknown Artist",
             status: art.status,
             createdAt: art.createdAt ? art.createdAt.toISOString() : null,
           }));
 
-          res.json(result);
+          res.json({
+            artworks: result,
+            total,
+            page: Number(page),
+            pages: Math.ceil(total / Number(limit)),
+          });
         } catch (error) {
           console.error("Error fetching artworks:", error);
           res.status(500).json({ error: "Failed to fetch artworks" });
@@ -128,7 +265,83 @@ async function run() {
         }
       });
 
-      
+      // Get single artwork by ID
+      app.get("/api/artworks/:id", async (req, res) => {
+        try {
+          const { ObjectId } = require("mongodb");
+          const { id } = req.params;
+
+          if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid artwork ID." });
+          }
+
+          const pipeline = [
+            { $match: { _id: new ObjectId(id) } },
+            {
+              $addFields: {
+                artistObjectId: {
+                  $convert: {
+                    input: "$artistId",
+                    to: "objectId",
+                    onError: null,
+                    onNull: null,
+                  },
+                },
+              },
+            },
+            {
+              $lookup: {
+                from: "user",
+                localField: "artistObjectId",
+                foreignField: "_id",
+                as: "artist",
+              },
+            },
+            { $unwind: { path: "$artist", preserveNullAndEmptyArrays: true } },
+            {
+              $project: {
+                _id: 1,
+                title: 1,
+                category: 1,
+                description: 1,
+                price: 1,
+                image: 1,
+                artistId: 1,
+                status: 1,
+                createdAt: 1,
+                artistName: "$artist.name",
+                artistAvatar: "$artist.image",
+              },
+            },
+          ];
+
+          const artworks = await artworkCollection
+            .aggregate(pipeline)
+            .toArray();
+
+          if (!artworks.length) {
+            return res.status(404).json({ error: "Artwork not found." });
+          }
+
+          const art = artworks[0];
+          res.json({
+            id: art._id.toString(),
+            title: art.title,
+            category: art.category,
+            description: art.description,
+            price: art.price,
+            image: art.image,
+            artistId: art.artistId,
+            status: art.status,
+            createdAt: art.createdAt ? art.createdAt.toISOString() : null,
+            artistName: art.artistName || "Unknown Artist",
+            artistAvatar: art.artistAvatar || "",
+          });
+        } catch (error) {
+          console.error("Error fetching artwork:", error);
+          res.status(500).json({ error: "Failed to fetch artwork." });
+        }
+      });
 
       // Send a ping to confirm a successful connection
       await client.db("admin").command({ ping: 1 });
