@@ -61,13 +61,14 @@ const client = new MongoClient(uri, {
     }
 });
 
-async function run() {
-    try {
-      // Connect the client to the server	(optional starting in v4.7)
-      await client.connect();
+// Connect the client to the server (optional, will connect dynamically)
+client.connect().catch(console.error);
 
-      const database = client.db("arthub_db");
-      const artworkCollection = database.collection("artworks");
+const database = client.db("arthub_db");
+const artworkCollection = database.collection("artworks");
+const usersCollection = database.collection("user");
+const transactionsCollection = database.collection("transactions");
+const commentsCollection = database.collection("comments");
 
       app.get("/api/artworks", async (req, res) => {
         try {
@@ -396,17 +397,15 @@ async function run() {
       });
 
       // Send a ping to confirm a successful connection
-      await client.db("admin").command({ ping: 1 });
-      console.log(
-        "Pinged your deployment. You successfully connected to MongoDB!",
-      );
+      client.db("admin").command({ ping: 1 }).then(() => {
+        console.log(
+          "Pinged your deployment. You successfully connected to MongoDB!",
+        );
+      }).catch(console.dir);
 
       // ============= STRIPE ENDPOINTS =============
 
-      // Helper collections
-      const usersCollection = database.collection("user");
-      const transactionsCollection = database.collection("transactions");
-      const commentsCollection = database.collection("comments");
+      // Helper collections (lifted to global scope)
 
       // Phase 2: Create Purchase Session
       app.post(
@@ -1249,14 +1248,8 @@ async function run() {
           res.status(500).json({ error: "Failed to fetch comments" });
         }
       });
-    } finally {
-        // Ensures that the client will close when you finish/error
-        // await client.close();
-    }
-}
-run().catch(console.dir);
 
-
+module.exports = app;
 
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
