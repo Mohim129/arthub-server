@@ -8,7 +8,10 @@ require('dotenv').config();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
 
 // Helper: Get purchase limit based on subscription tier
@@ -21,22 +24,19 @@ const getUserPurchaseLimit = (tier) => {
   return limits[tier] || 3;
 };
 
-// Authentication middleware
+const { auth } = require('../arthub/src/lib/auth');
+
 const requireAuth = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: "Unauthorized" });
+    const session = await auth.api.getSession({ headers: req.headers });
+    if (!session?.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
-    // For now, we'll use a simple token validation
-    // In production, validate the session properly with Better Auth
-    req.user = { id: req.headers['x-user-id'] };
-    if (!req.user.id) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    req.user = session.user;   // contains { id, email, name, role, ... }
     next();
   } catch (error) {
-    res.status(401).json({ error: "Unauthorized" });
+    console.error('Auth middleware error:', error);
+    res.status(401).json({ error: 'Authentication failed' });
   }
 };
 
@@ -404,7 +404,7 @@ async function run() {
       // ============= STRIPE ENDPOINTS =============
 
       // Helper collections
-      const usersCollection = database.collection("users");
+      const usersCollection = database.collection("user");
       const transactionsCollection = database.collection("transactions");
       const commentsCollection = database.collection("comments");
 
@@ -597,6 +597,7 @@ async function run() {
                   { _id: new ObjectId(userId) },
                   {
                     $set: {
+                      tier: tier,
                       subscriptionTier: tier,
                       purchaseLimit: getUserPurchaseLimit(tier),
                     },
