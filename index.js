@@ -51,8 +51,6 @@ app.get('/', (req, res) => {
 
 const uri = process.env.MONGO_DB_URI;
 
-
-
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
     serverApi: {
@@ -62,8 +60,8 @@ const client = new MongoClient(uri, {
     }
 });
 
-// Connect the client to the server (optional, will connect dynamically)
-client.connect().catch(console.error);
+// Cache the connection promise for serverless environments
+let clientPromise = client.connect();
 
 const database = client.db("arthub_db");
 const artworkCollection = database.collection("artworks");
