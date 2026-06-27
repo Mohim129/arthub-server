@@ -10,6 +10,7 @@ async function createAuth() {
   const db = client.db(process.env.AUTH_DB_NAME);
 
   const auth = betterAuth({
+    trustedOrigins: [process.env.CLIENT_URL].filter(Boolean),
     emailAndPassword: { enabled: true },
     socialProviders: {
       google: {
