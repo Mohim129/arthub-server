@@ -24,7 +24,7 @@ const getUserPurchaseLimit = (tier) => {
   return limits[tier] || 3;
 };
 
-const { auth } = require('../arthub/src/lib/auth');
+const { auth } = require('./auth');
 
 const requireAuth = async (req, res, next) => {
   try {
