@@ -24,10 +24,11 @@ const getUserPurchaseLimit = (tier) => {
   return limits[tier] || 3;
 };
 
-const { auth } = require('./auth');
+const { authPromise } = require('./auth');
 
 const requireAuth = async (req, res, next) => {
   try {
+    const auth = await authPromise;
     const session = await auth.api.getSession({ headers: req.headers });
     if (!session?.user) {
       return res.status(401).json({ error: 'Unauthorized' });
