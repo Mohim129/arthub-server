@@ -1251,6 +1251,8 @@ const commentsCollection = database.collection("comments");
 
 module.exports = app;
 
-app.listen(port, () => {
+if (process.env.VERCEL !== '1') {
+  app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
-})
+  })
+}
