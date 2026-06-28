@@ -1149,6 +1149,7 @@ const commentsCollection = database.collection("comments");
                   salesCount: { $sum: 1 },
                 },
               },
+              { $match: { _id: { $exists: true, $ne: null } } },
               { $sort: { salesCount: -1 } },
               { $limit: 3 },
               {
@@ -1158,7 +1159,9 @@ const commentsCollection = database.collection("comments");
                   pipeline: [
                     {
                       $match: {
-                        $expr: { $eq: ["$_id", { $toObjectId: "$$artistId" }] },
+                        $expr: {
+                          $eq: [{ $toString: "$_id" }, { $toString: "$$artistId" }],
+                        },
                       },
                     },
                   ],
@@ -1173,6 +1176,7 @@ const commentsCollection = database.collection("comments");
                   _id: 1,
                   name: "$artist.name",
                   image: "$artist.image",
+                  role: "$artist.role",
                   salesCount: 1,
                 },
               },
@@ -1180,9 +1184,10 @@ const commentsCollection = database.collection("comments");
             .toArray();
 
           const result = topArtists.map((artist) => ({
-            id: artist._id,
+            id: artist._id != null ? String(artist._id) : "",
             name: artist.name || "Unknown",
             avatar: artist.image || "",
+            role: artist.role || "",
             salesCount: artist.salesCount,
           }));
 
@@ -1245,6 +1250,55 @@ const commentsCollection = database.collection("comments");
         } catch (error) {
           console.error("Error fetching comments:", error);
           res.status(500).json({ error: "Failed to fetch comments" });
+        }
+      });
+
+      // Get artist profile and their artworks
+      app.get("/api/artists/:id", async (req, res) => {
+        try {
+          const { id } = req.params;
+
+          if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "Invalid artist ID" });
+          }
+
+          const artist = await usersCollection.findOne(
+            { _id: new ObjectId(id) },
+            { projection: { name: 1, bio: 1, image: 1, role: 1, createdAt: 1 } },
+          );
+
+          if (!artist) {
+            return res.status(404).json({ error: "Artist not found" });
+          }
+
+          const artworks = await artworkCollection
+            .find({ artistId: id })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+          const formattedArtworks = artworks.map((art) => ({
+            id: art._id.toString(),
+            title: art.title,
+            category: art.category,
+            price: art.price,
+            image: art.image,
+            status: art.status,
+            createdAt: art.createdAt ? art.createdAt.toISOString() : null,
+          }));
+
+          res.json({
+            id: artist._id.toString(),
+            name: artist.name || "Unknown Artist",
+            bio: artist.bio || "",
+            image: artist.image || "",
+            role: artist.role,
+            joinedAt: artist.createdAt ? artist.createdAt.toISOString() : null,
+            artworks: formattedArtworks,
+            totalArtworks: formattedArtworks.length,
+          });
+        } catch (error) {
+          console.error("Error fetching artist profile:", error);
+          res.status(500).json({ error: "Failed to fetch artist profile" });
         }
       });
 
