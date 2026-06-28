@@ -18,6 +18,19 @@ async function createAuth() {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       },
     },
+
+    // ===== ADDED: Cross‑site session cookie =====
+    session: {
+      cookieOptions: {
+        secure: true, // only sent over HTTPS (required by SameSite=None)
+        sameSite: "none", // allow the cookie to be sent to other domains
+        httpOnly: true, // not accessible by JavaScript
+        maxAge: 60 * 60 * 24 * 7, // 7 days
+        domain: process.env.COOKIE_DOMAIN || undefined, // scoped to the frontend's domain
+      },
+    },
+    // ==========================================
+
     database: mongodbAdapter(db, { client }),
     databaseHooks: {
       user: {
