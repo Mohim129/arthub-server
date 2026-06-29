@@ -1,7 +1,4 @@
 
-### Server‑Side README (`README.md` in your backend repo)
-
-```markdown
 # ArtHub – Backend API (Express + MongoDB)
 
 This is the **Express backend** for ArtHub. It provides all REST API endpoints for authentication, artwork management, transactions, comments, analytics, and Stripe payment processing.
@@ -104,6 +101,3 @@ Deployed as a serverless function on Vercel. The code is exported (`module.expor
 - `jsonwebtoken`
 - `better-auth`
 - `dotenv`
-```
-
-You can adjust the repository URLs and any specific details as needed.
