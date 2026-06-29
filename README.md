@@ -1,4 +1,3 @@
-
 # ArtHub – Backend API (Express + MongoDB)
 
 This is the **Express backend** for ArtHub. It provides all REST API endpoints for authentication, artwork management, transactions, comments, analytics, and Stripe payment processing.
@@ -63,7 +62,7 @@ arthub-server/
 ## Getting Started
 1. **Clone the repo**
    ```bash
-   git clone <server-repo-url>
+   (get it yourself)
    cd arthub-server
    ```
 2. **Install dependencies**
