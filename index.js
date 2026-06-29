@@ -896,6 +896,7 @@ const commentsCollection = database.collection("comments");
                   userEmail: "$user.email",
                   userName: "$user.name",
                   artworkTitle: "$artwork.title",
+                  artworkCategory: "$artwork.category",
                 },
               },
             ])
@@ -916,6 +917,7 @@ const commentsCollection = database.collection("comments");
             userEmail: t.userEmail || "Unknown",
             userName: t.userName || "Unknown",
             artworkTitle: t.artworkTitle || null,
+            artworkCategory: t.artworkCategory || null,
           }));
 
           res.json(result);
