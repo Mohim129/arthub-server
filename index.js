@@ -25,9 +25,30 @@ const getUserPurchaseLimit = (tier) => {
 };
 
 const { authPromise } = require('./auth');
+const jwt = require('jsonwebtoken');
 
 const requireAuth = async (req, res, next) => {
   try {
+    const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      if (token) {
+        try {
+          const secret = process.env.JWT_SECRET || process.env.BETTER_AUTH_SECRET;
+          const decoded = jwt.verify(token, secret);
+          if (decoded && decoded.userId) {
+            req.user = {
+              ...decoded,
+              id: decoded.userId // ensure compatibility with backend code using req.user.id
+            };
+            return next();
+          }
+        } catch (jwtError) {
+          console.warn('JWT verification failed, falling back to session check:', jwtError.message);
+        }
+      }
+    }
+
     const auth = await authPromise;
     const session = await auth.api.getSession({ headers: req.headers });
     if (!session?.user) {
@@ -40,6 +61,20 @@ const requireAuth = async (req, res, next) => {
     res.status(401).json({ error: 'Authentication failed' });
   }
 };
+
+const requireRole = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const userRole = req.user.role || 'user';
+    if (!roles.includes(userRole)) {
+      return res.status(403).json({ error: 'Forbidden: Access denied' });
+    }
+    next();
+  };
+};
+
 
 
 
@@ -619,6 +654,11 @@ const commentsCollection = database.collection("comments");
         try {
           const { id } = req.params;
 
+          // Ownership and Admin check
+          if (req.user.id !== id && req.user.role !== 'admin') {
+            return res.status(403).json({ error: "Forbidden: Access denied" });
+          }
+
           if (!ObjectId.isValid(id)) {
             return res.status(400).json({ error: "Invalid user ID" });
           }
@@ -713,9 +753,13 @@ const commentsCollection = database.collection("comments");
       });
 
       // Phase 5: Artist Sales History
-      app.get("/api/artists/:id/sales", async (req, res) => {
+      app.get("/api/artists/:id/sales", requireAuth, async (req, res) => {
         try {
           const { id } = req.params;
+
+          if (req.user.role !== 'admin' && req.user.id !== req.params.id) {
+            return res.status(403).json({ error: 'Forbidden' });
+          }
 
           const sales = await transactionsCollection
             .aggregate([
@@ -796,7 +840,7 @@ const commentsCollection = database.collection("comments");
       });
 
       // Phase 5: Admin All Transactions
-      app.get("/api/admin/transactions", requireAuth, async (req, res) => {
+      app.get("/api/admin/transactions", requireAuth, requireRole('admin'), async (req, res) => {
         try {
           // In a real app, check if user is admin
           const transactions = await transactionsCollection
@@ -999,7 +1043,7 @@ const commentsCollection = database.collection("comments");
       });
 
       // Phase 7: Admin Stats
-      app.get("/api/admin/stats", requireAuth, async (req, res) => {
+      app.get("/api/admin/stats", requireAuth, requireRole('admin'), async (req, res) => {
         try {
           // In a real app, check if user is admin
           const [totalUsers, totalArtists, totalArtworks, totalRevenue] =
