@@ -86,7 +86,7 @@ arthub-server/
    ```
 4. **Start the server**
    ```bash
-   node index.js
+   nodemon index.js
    ```
    The server will run on `http://localhost:5000`.
 
